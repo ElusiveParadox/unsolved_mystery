@@ -5,10 +5,10 @@ import shutil
 import time
 
 from dotenv import load_dotenv
-from backend.schemas import QueryRequest, QueryResponse, UserAuth, TokenResponse
-from backend.rag_engine import query_rag, build_index
-from backend.db import SessionLocal, User, Chat, init_db
-from backend.auth import hash_password, verify_password, create_token, decode_token
+from schemas import QueryRequest, QueryResponse, UserAuth, TokenResponse
+from rag_engine import query_rag, build_index
+from db import SessionLocal, User, Chat, init_db
+from auth import hash_password, verify_password, create_token, decode_token
 
 load_dotenv()
 
