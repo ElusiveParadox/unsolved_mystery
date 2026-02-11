@@ -3,91 +3,80 @@ from groq import Groq
 from dotenv import load_dotenv
 from pypdf import PdfReader
 
-from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 load_dotenv()
+
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 EVIDENCE_FOLDER = "../evidence"
-INDEX_FOLDER = "../faiss_index"
 
-embedding_model = HuggingFaceEmbeddings(
-    model_name="all-MiniLM-L6-v2"
-)
-
-db = None
+vectorizer = None
+doc_texts = []
+doc_sources = []
+doc_vectors = None
 
 
 def read_file(path: str) -> str:
     if path.endswith(".pdf"):
         reader = PdfReader(path)
-        return "\n".join(page.extract_text() or "" for page in reader.pages)
+        return "\n".join(
+            page.extract_text() or ""
+            for page in reader.pages
+        )
 
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
 
 def build_index():
-    global db
-    texts, metas = [], []
+    global vectorizer, doc_texts, doc_sources, doc_vectors
+
+    doc_texts = []
+    doc_sources = []
 
     os.makedirs(EVIDENCE_FOLDER, exist_ok=True)
 
     for fname in os.listdir(EVIDENCE_FOLDER):
-        if not (fname.endswith(".txt") or fname.endswith(".pdf")):
+        if not fname.endswith((".txt", ".pdf")):
             continue
 
         path = os.path.join(EVIDENCE_FOLDER, fname)
         content = read_file(path)
 
         if content.strip():
-            texts.append(content)
-            metas.append({"source": fname})
+            doc_texts.append(content)
+            doc_sources.append(fname)
 
-    if not texts:
-        db = None
+    if not doc_texts:
+        doc_vectors = None
         return
 
-    db = FAISS.from_texts(
-        texts=texts,
-        embedding=embedding_model,
-        metadatas=metas
-    )
-
-    db.save_local(INDEX_FOLDER)
-
-
-def load_index():
-    global db
-    if os.path.exists(INDEX_FOLDER):
-        db = FAISS.load_local(
-            INDEX_FOLDER,
-            embedding_model,
-            allow_dangerous_deserialization=True
-        )
+    vectorizer = TfidfVectorizer(stop_words="english")
+    doc_vectors = vectorizer.fit_transform(doc_texts)
 
 
 def query_rag(question: str):
-    global db
+    global doc_vectors
 
-    if db is None:
-        load_index()
-
-    if db is None:
+    if doc_vectors is None:
         build_index()
 
-    if db is None:
+    if doc_vectors is None:
         return "No evidence uploaded yet.", [], []
 
-    retrieved = db.similarity_search(question, k=3)
+    q_vector = vectorizer.transform([question])
+    sims = cosine_similarity(q_vector, doc_vectors)[0]
+
+    top_indices = sims.argsort()[-3:][::-1]
 
     context = ""
     chunks = []
 
-    for r in retrieved:
-        src = r.metadata["source"]
-        txt = r.page_content
+    for idx in top_indices:
+        src = doc_sources[idx]
+        txt = doc_texts[idx][:1500]
 
         context += f"Evidence from {src}:\n{txt}\n\n"
         chunks.append({"content": txt, "source": src})
@@ -101,8 +90,8 @@ Answer ONLY using evidence below.
 Question: {question}
 
 Rules:
-- Always cite sources like: According to [source]...
-- If missing, say so clearly.
+- Always cite sources like: According to [filename]...
+- If evidence is missing, say so clearly.
 """
 
     response = client.chat.completions.create(

@@ -1,8 +1,12 @@
 fastapi
 uvicorn
 pydantic
-langchain
-faiss-cpu
-sentence-transformers
-ollama
+python-dotenv
+groq
+pypdf
 python-multipart
+sqlalchemy
+psycopg2-binary
+passlib[bcrypt]
+python-jose
+scikit-learn
