@@ -15,9 +15,13 @@ load_dotenv()
 app = FastAPI(title="Cold Case Detective API")
 init_db()
 
+@app.get("/healthz")
+def health():
+    return {"status": "ok"}
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
-EVIDENCE_FOLDER = "../evidence"
+EVIDENCE_FOLDER = "evidence"
 os.makedirs(EVIDENCE_FOLDER, exist_ok=True)
 
 USER_LIMIT = 15
